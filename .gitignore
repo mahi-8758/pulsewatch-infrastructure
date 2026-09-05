@@ -1,0 +1,12 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform.tfvars
+*.zip
+.env
+*.log
+.DS_Store
+build/
+response.json
+
