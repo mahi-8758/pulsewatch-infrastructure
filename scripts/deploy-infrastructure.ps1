@@ -66,7 +66,6 @@ if (Test-Path $zipFile) { Remove-Item -Force $zipFile }
 
 New-Item -ItemType Directory -Path $buildDir | Out-Null
 Copy-Item (Join-Path $backendDir "lambda\api\api.js") (Join-Path $buildDir "api.js")
-Copy-Item -Recurse (Join-Path $backendDir "node_modules") (Join-Path $buildDir "node_modules")
 Copy-Item (Join-Path $backendDir "package.json") (Join-Path $buildDir "package.json")
 
 $entries = Get-ChildItem -LiteralPath $buildDir -Force | Select-Object -ExpandProperty FullName
@@ -134,10 +133,42 @@ try {
 $integRespParams = '{\"method.response.header.Access-Control-Allow-Headers\":\"''Authorization,Content-Type''\",\"method.response.header.Access-Control-Allow-Methods\":\"''GET,POST,DELETE,OPTIONS''\",\"method.response.header.Access-Control-Allow-Origin\":\"''*''\"}'
 aws apigateway put-integration-response --rest-api-id $apiId --resource-id $targetIdResourceId --http-method OPTIONS --status-code 200 --response-parameters $integRespParams | Out-Null
 
+# Get or create /targets/{targetId}/check resource
+$checkResourceId = (aws apigateway get-resources --rest-api-id $apiId --query "items[?parentId=='$targetIdResourceId' && pathPart=='check'].id | [0]" --output text)
+if (-not $checkResourceId -or $checkResourceId -eq "None") {
+    Write-Host "Creating resource /targets/{targetId}/check..."
+    $checkResourceId = (aws apigateway create-resource --rest-api-id $apiId --parent-id $targetIdResourceId --path-part 'check' --query id --output text)
+}
+
+# Put POST method on /targets/{targetId}/check
+Write-Host "Configuring POST method on /targets/{targetId}/check..."
+try {
+    aws apigateway get-method --rest-api-id $apiId --resource-id $checkResourceId --http-method POST 2>$null | Out-Null
+} catch {
+    aws apigateway put-method --rest-api-id $apiId --resource-id $checkResourceId --http-method POST --authorization-type COGNITO_USER_POOLS --authorizer-id $authorizerId | Out-Null
+}
+aws apigateway put-integration --rest-api-id $apiId --resource-id $checkResourceId --http-method POST --type AWS_PROXY --integration-http-method POST --uri $integrationUri | Out-Null
+
+# Put OPTIONS method on /targets/{targetId}/check
+Write-Host "Configuring OPTIONS preflight on /targets/{targetId}/check..."
+try {
+    aws apigateway get-method --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS 2>$null | Out-Null
+} catch {
+    aws apigateway put-method --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS --authorization-type NONE | Out-Null
+}
+aws apigateway put-integration --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS --type MOCK --request-templates $mockTemplates | Out-Null
+
+try {
+    aws apigateway get-method-response --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS --status-code 200 2>$null | Out-Null
+} catch {
+    aws apigateway put-method-response --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS --status-code 200 --response-parameters $methodRespParams | Out-Null
+}
+aws apigateway put-integration-response --rest-api-id $apiId --resource-id $checkResourceId --http-method OPTIONS --status-code 200 --response-parameters $integRespParams | Out-Null
+
 # Create Deployment
 Write-Host "Creating API Gateway deployment for stage 'prod'..."
-$deploymentId = (aws apigateway create-deployment --rest-api-id $apiId --description "Deploy DELETE route" --query id --output text)
+$deploymentId = (aws apigateway create-deployment --rest-api-id $apiId --description "Deploy check route" --query id --output text)
 aws apigateway update-stage --rest-api-id $apiId --stage-name prod --patch-operations op=replace,path=/deploymentId,value=$deploymentId | Out-Null
 
 Write-Host "`n✅ DEPLOYMENT FINISHED SUCCESSFULLY!"
-Write-Host "API Endpoint: https://${apiId}.execute-api.${region}.amazonaws.com/prod/targets/{targetId}"
+Write-Host "API Endpoint: https://${apiId}.execute-api.${region}.amazonaws.com/prod/targets/{targetId}/check"

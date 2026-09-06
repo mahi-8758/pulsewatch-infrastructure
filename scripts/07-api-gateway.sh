@@ -21,6 +21,7 @@ get_or_create_resource() {
 }
 TARGETS_ID=$(get_or_create_resource "$ROOT_ID" targets)
 TARGETS_TARGET_ID=$(get_or_create_resource "$TARGETS_ID" '{targetId}')
+CHECK_TARGET_ID=$(get_or_create_resource "$TARGETS_TARGET_ID" check)
 HISTORY_ID=$(get_or_create_resource "$ROOT_ID" history)
 HISTORY_TARGET_ID=$(get_or_create_resource "$HISTORY_ID" '{targetId}')
 INCIDENTS_ID=$(get_or_create_resource "$ROOT_ID" incidents)
@@ -36,9 +37,10 @@ put_lambda_method() {
 put_lambda_method "$TARGETS_ID" POST
 put_lambda_method "$TARGETS_ID" GET
 put_lambda_method "$TARGETS_TARGET_ID" DELETE
+put_lambda_method "$CHECK_TARGET_ID" POST
 put_lambda_method "$HISTORY_TARGET_ID" GET
 put_lambda_method "$INCIDENTS_TARGET_ID" GET
-for resource_id in "$TARGETS_ID" "$TARGETS_TARGET_ID" "$HISTORY_TARGET_ID" "$INCIDENTS_TARGET_ID"; do
+for resource_id in "$TARGETS_ID" "$TARGETS_TARGET_ID" "$CHECK_TARGET_ID" "$HISTORY_TARGET_ID" "$INCIDENTS_TARGET_ID"; do
   if ! aws apigateway get-method --rest-api-id "$API_ID" --resource-id "$resource_id" --http-method OPTIONS >/dev/null 2>&1; then
     aws apigateway put-method --rest-api-id "$API_ID" --resource-id "$resource_id" --http-method OPTIONS --authorization-type NONE >/dev/null
   fi

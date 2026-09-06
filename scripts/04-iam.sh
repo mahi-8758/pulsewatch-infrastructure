@@ -2,12 +2,10 @@
 set -e
 source "$(dirname "$0")/../config/variables.sh"
 
-echo "=== Phase 4: IAM ==="
-TOPIC_ARN=$(aws sns create-topic --name "$ALERT_TOPIC_NAME" --query TopicArn --output text)
 ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${LAMBDA_ROLE_NAME}"
 TRUST_POLICY='{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
 PERMISSION_POLICY=$(cat <<EOF
-{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:GetItem","dynamodb:PutItem","dynamodb:Query","dynamodb:Scan","dynamodb:UpdateItem","dynamodb:DeleteItem","dynamodb:BatchWriteItem"],"Resource":["arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/MonitorTargets","arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/CheckResults","arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/Incidents"]},{"Effect":"Allow","Action":"sns:Publish","Resource":"${TOPIC_ARN}"}]}
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["dynamodb:GetItem","dynamodb:PutItem","dynamodb:Query","dynamodb:Scan","dynamodb:UpdateItem","dynamodb:DeleteItem","dynamodb:BatchWriteItem"],"Resource":["arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/MonitorTargets","arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/CheckResults","arn:aws:dynamodb:${REGION}:${ACCOUNT_ID}:table/Incidents"]},{"Effect":"Allow","Action":"ses:SendEmail","Resource":"*"},{"Effect":"Allow","Action":"cognito-idp:AdminGetUser","Resource":"arn:aws:cognito-idp:${REGION}:${ACCOUNT_ID}:userpool/*"}]}
 EOF
 )
 if ! aws iam get-role --role-name "$LAMBDA_ROLE_NAME" >/dev/null 2>&1; then
